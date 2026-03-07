@@ -67,18 +67,3 @@ let my_box = unsafe{ {
     res.assume_init()
 } }
 ```
-
-
-## Limitations
-
-The syntax:
-```rust
-place_boxed!(
-  MyStruct {
-    ..Rest()
-  }
-)
-```
-
-is not allowed, this is because there isnt really a good way to figure out which values are initalized by the Rest statement, and which are not
-if a good method can be figure out, I will add it to the crate and remove this limitation
