@@ -3,6 +3,41 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Expr};
 
+/*
+This macro allows you to construct values in the heap in-place safely,
+using the struct initialization syntax
+
+
+Example usage:
+let mut my_box = place_boxed!(
+    MyStruct{
+        member_1: 5,
+        member_array: [0; 100],
+        member_array2: [1, 2, 3],
+    }
+)
+
+Example codegen:
+let mut my_box = {
+    let mut res = Box::<MyStruct>::new_uninit();
+
+    unsafe {
+        let ptr = res.as_mut_ptr();
+
+        (&raw mut (*ptr).member_1).write(5);
+
+        for i in 0..100 {
+            (&raw mut (*ptr).member_array[i]).write(0);
+        }
+
+        (&raw mut (*ptr).member_array2[0]).write(1);
+        (&raw mut (*ptr).member_array2[1]).write(2);
+        (&raw mut (*ptr).member_array2[2]).write(3);
+
+        res.assume_init()
+    }
+}
+*/
 #[proc_macro]
 pub fn place_boxed(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as Expr);
