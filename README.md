@@ -20,66 +20,53 @@ to undefined behavior, that is what this crate aims to solve
 
 **Example 1**
 ```rust
-pub struct BigStruct {
-    array: [u64; 200_000], //array of 200_000 u64's
-    array2: [i32; 5],
-    number: i32,
+struct MyStruct {
+    trivial_val: i32,
+    name: String,
+    array: [i32; 5],
+    nested_array: [[i32; 10]; 5]
 }
 
-impl BigStruct {
-
-  pub fn new() -> Self {
-    place_boxed!{
-      Self{
-        array: [0; 200_000],
-        array2: [1, 2, 3, 4, 5],
-        number: 0x91ACE,
-      }
+let my_box = unsafe{ place_boxed!(
+    MyStruct {
+        trivial_val: 10,
+        name: String::from("Bob"),
+        array: [1, 2, 3, 4, 5],
+        nested_array: [[5; 10]; 5]
     }
-  }
-
-}
+) };
 ```
 
-The macro will then generate code that looks like:
+**Example codegen (edited for readability):**
 ```rust
-pub struct BigStruct {
-    array: [u64; 200_000], //array of 200_000 u64's
-    number: i32,
-}
+let my_box = unsafe{ {
+    let mut res = std::boxed::Box::<MyStruct>::new_uninit();
 
-impl BigStruct {
+    let ptr = res.as_mut_ptr();
 
-  pub fn new() -> Self {
-    place_boxed!{
-      {
-        let mut res = std::boxed::Box::<Self>::new_uninit();
-        unsafe {
-          let ptr = res.as_mut_ptr();
-          //array: [0; 200_000]
-          for i in 0..200_000 {
-            (&raw mut (*ptr).array[i]).write(0)
-          }
+    (&raw mut (*ptr).trivial_val).write(10);
 
-          //array2: [1, 2, 3, 4, 5]
-          (&raw mut (*ptr).array2[0]).write(1)
-          (&raw mut (*ptr).array2[1]).write(2)
-          (&raw mut (*ptr).array2[2]).write(3)
-          (&raw mut (*ptr).array2[3]).write(4)
-          (&raw mut (*ptr).array2[4]).write(5)
+    (&raw mut (*ptr).name).write(String::from("Bob"));
 
-          //number: 0x91ACE
-          (&raw mut (*ptr).number).write(0x91ACE)
+    (&raw mut (*ptr).array[0usize]).write(1);
 
-          res.assume_init()
+    (&raw mut (*ptr).array[1usize]).write(2);
+
+    (&raw mut (*ptr).array[2usize]).write(3);
+
+    (&raw mut (*ptr).array[3usize]).write(4);
+
+    (&raw mut (*ptr).array[4usize]).write(5);
+
+    for i_0 in 0..5 {
+        for i_1 in 0..10 {
+            (&raw mut (*ptr).nested_array[i_0][i_1]).write(5);
         }
-      }
     }
-  }
 
-}
+    res.assume_init()
+} }
 ```
-
 
 
 ## Limitations
