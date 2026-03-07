@@ -13,7 +13,7 @@ let mut res = Box::new(
     MyStruct::new()
 )
 ```
-In some cases the rust compiler will optomize away the copy, but its not guaranteed, and assuming it is can often lead
+In some cases the rust compiler will optimize away the copy, but its not guaranteed, and assuming it is can often lead
 to undefined behavior, that is what this crate aims to solve
 
 ## Examples
