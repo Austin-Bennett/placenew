@@ -1,0 +1,26 @@
+[package]
+name = "placenew"
+version = "0.0.0"
+authors = ["peterparker <theaustinbennett@gmail.com>"]
+keywords = ["template", "proc_macro", "procmacro"]
+edition = "2018"
+
+license = "MIT"
+description = """
+A crate providing the macro 'place_boxed' which allows you to create a object in-place on the heap
+using the normal struct initializer, the macro uses Box::new_uninit(), initializes all members
+using the values from the struct initializer, and then calls .assume_init()
+for regular value types => writes the expression in-place
+for array types ([T; N]) => generates a for loop for expressions such as [0; 100],
+and generates a sequence of arr[i] = v for an expression such as [0, 1, 2, 3]
+"""
+
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1"
+proc-macro2 = "1.0"
+syn = { version = "1.0", features = ["full"] }
+
