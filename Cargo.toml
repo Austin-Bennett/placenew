@@ -1,6 +1,6 @@
 [package]
 name = "placenew"
-version = "1.1.0"
+version = "1.1.1"
 authors = ["peterparker <theaustinbennett@gmail.com>"]
 keywords = ["template", "proc_macro", "procmacro"]
 edition = "2018"
