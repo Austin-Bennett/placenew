@@ -88,50 +88,50 @@ fn inner_place_expr(member: proc_macro2::TokenStream, val: &Expr, nesting: u32) 
 /// large structures on the heap
 ///
 /// example usage:
-/// struct MyStruct {
-///     trivial_val: i32,
-///     name: String,
-///     array: [i32; 5],
-///     nested_array: [[i32; 10]; 5]
-/// }
+///struct MyStruct {
+///    trivial_val: i32,
+///    name: String,
+///    array: [i32; 5],
+///    nested_array: [[i32; 10]; 5]
+///}
 ///
-/// let my_box = unsafe{ place_boxed!(
-///     MyStruct {
-///         trivial_val: 10,
-///         name: String::from("Bob"),
-///         array: [1, 2, 3, 4, 5],
-///         nested_array: [[5; 10]; 5]
-///     }
-/// ) };
+///let my_box = unsafe{ place_boxed!(
+///    MyStruct {
+///        trivial_val: 10,
+///        name: String::from("Bob"),
+///        array: [1, 2, 3, 4, 5],
+///        nested_array: [[5; 10]; 5]
+///    }
+///) };
 ///
-/// example codegen (edited for readability):
-/// let my_box = unsafe{ {
-///     let mut res = std::boxed::Box::<MyStruct>::new_uninit();
+///example codegen (edited for readability):
+///let my_box = unsafe{ {
+///    let mut res = std::boxed::Box::<MyStruct>::new_uninit();
 ///
-///     let ptr = res.as_mut_ptr();
+///    let ptr = res.as_mut_ptr();
 ///
-///     (&raw mut (*ptr).trivial_val).write(10);
+///    (&raw mut (*ptr).trivial_val).write(10);
 ///
-///     (&raw mut (*ptr).name).write(String::from("Bob"));
+///    (&raw mut (*ptr).name).write(String::from("Bob"));
 ///
-///     (&raw mut (*ptr).array[0usize]).write(1);
+///    (&raw mut (*ptr).array[0usize]).write(1);
 ///
-///     (&raw mut (*ptr).array[1usize]).write(2);
+///    (&raw mut (*ptr).array[1usize]).write(2);
 ///
-///     (&raw mut (*ptr).array[2usize]).write(3);
+///    (&raw mut (*ptr).array[2usize]).write(3);
 ///
-///     (&raw mut (*ptr).array[3usize]).write(4);
+///    (&raw mut (*ptr).array[3usize]).write(4);
 ///
-///     (&raw mut (*ptr).array[4usize]).write(5);
+///    (&raw mut (*ptr).array[4usize]).write(5);
 ///
-///     for i_0 in 0..5 {
-///         for i_1 in 0..10 {
-///             (&raw mut (*ptr).nested_array[i_0][i_1]).write(5);
-///         }
-///     }
+///    for i_0 in 0..5 {
+///        for i_1 in 0..10 {
+///            (&raw mut (*ptr).nested_array[i_0][i_1]).write(5);
+///        }
+///    }
 ///
-///     res.assume_init()
-/// } }
+///    res.assume_init()
+///} }
 #[proc_macro]
 pub fn place_boxed(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as Expr);

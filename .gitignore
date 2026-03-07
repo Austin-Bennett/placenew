@@ -2,4 +2,4 @@
 **/*.rs.bk
 Cargo.lock
 .idea
-/src/pnew_tests
+/src/pnew_tests/target
