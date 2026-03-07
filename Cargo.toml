@@ -14,7 +14,8 @@ for regular value types => writes the expression in-place
 for array types ([T; N]) => generates a for loop for expressions such as [0; 100],
 and generates a sequence of arr[i] = v for an expression such as [0, 1, 2, 3]
 """
-
+repository = "https://github.com/Austin-Bennett/placenew"
+readme = "README.md"
 
 [lib]
 proc-macro = true
