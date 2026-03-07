@@ -88,6 +88,7 @@ fn inner_place_expr(member: proc_macro2::TokenStream, val: &Expr, nesting: u32) 
 /// large structures on the heap
 ///
 /// example usage:
+/// ```rust
 ///struct MyStruct {
 ///    trivial_val: i32,
 ///    name: String,
@@ -103,8 +104,10 @@ fn inner_place_expr(member: proc_macro2::TokenStream, val: &Expr, nesting: u32) 
 ///        nested_array: [[5; 10]; 5]
 ///    }
 ///) };
+/// ```
 ///
 ///example codegen (edited for readability):
+/// ```rust
 ///let my_box = unsafe{ {
 ///    let mut res = std::boxed::Box::<MyStruct>::new_uninit();
 ///
@@ -132,6 +135,7 @@ fn inner_place_expr(member: proc_macro2::TokenStream, val: &Expr, nesting: u32) 
 ///
 ///    res.assume_init()
 ///} }
+/// ```
 #[proc_macro]
 pub fn place_boxed(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as Expr);
