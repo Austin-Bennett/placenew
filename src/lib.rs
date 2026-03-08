@@ -97,11 +97,6 @@ impl syn::parse::Parse for PlaceBoxedInput {
 
 /// place_boxed is a macro that creates a structure in-place from a structure initializer input
 ///
-/// this macro is unsafe as there isn't a way to validate the structure initializer input is valid,
-/// you can leave out some fields, and so this macro requires wrapping with unsafe in order to
-/// mark that the programmer must validate their input is valid, my recommendation is to
-/// first initialize the struct as you would normally, validate it compiles through either your ide,
-/// or manually compiling, then wrapping in place_boxed
 ///
 /// this macro is great for reducing unnecessary copying, or simplifying constructing
 /// large structures on the heap
