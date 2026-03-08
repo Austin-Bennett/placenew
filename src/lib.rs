@@ -1,8 +1,9 @@
 extern crate proc_macro;
 use proc_macro::{TokenStream};
+use std::convert::TryInto;
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, Expr, FieldValue, Member};
-
+use syn::parse::Parser;
 /*
 This macro allows you to construct values in the heap in-place safely,
 using the struct initialization syntax
@@ -75,6 +76,24 @@ fn inner_place_expr(member: proc_macro2::TokenStream, val: &Expr, nesting: u32) 
     }
 }
 
+struct PlaceBoxedInput {
+    expr: syn::Expr,
+    ty: Option<syn::Type>,
+}
+
+impl syn::parse::Parse for PlaceBoxedInput {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let expr = input.parse::<syn::Expr>()?;
+        let ty = if input.peek(syn::Token![,]) {
+            input.parse::<syn::Token![,]>()?;
+            Some(input.parse::<syn::Type>()?)
+        } else {
+            None
+        };
+        Ok(Self { expr, ty })
+    }
+}
+
 
 /// place_boxed is a macro that creates a structure in-place from a structure initializer input
 ///
@@ -96,19 +115,30 @@ fn inner_place_expr(member: proc_macro2::TokenStream, val: &Expr, nesting: u32) 
 ///    nested_array: [[i32; 10]; 5]
 ///}
 ///
-///let my_box = unsafe{ place_boxed!(
+///let my_box = place_boxed!(
 ///    MyStruct {
 ///        trivial_val: 10,
 ///        name: String::from("Bob"),
 ///        array: [1, 2, 3, 4, 5],
 ///        nested_array: [[5; 10]; 5]
 ///    }
-///) };
+///);
+///
+/// let my_boxed_slice = place_boxed!( [10; 100_000], [i32; 100_000] );
 /// ```
 ///
 ///example codegen (edited for readability):
 /// ```rust
-///let my_box = unsafe{ {
+///let my_box = unsafe {
+///    let _ensure_struct_correct = || {
+///         MyStruct {
+///            trivial_val: 10,
+///            name: String::from("Bob"),
+///            array: [1, 2, 3, 4, 5],
+///            nested_array: [[5; 10]; 5]
+///         }
+///    };
+///
 ///    let mut res = std::boxed::Box::<MyStruct>::new_uninit();
 ///
 ///    let ptr = res.as_mut_ptr();
@@ -134,17 +164,45 @@ fn inner_place_expr(member: proc_macro2::TokenStream, val: &Expr, nesting: u32) 
 ///    }
 ///
 ///    res.assume_init()
-///} }
+///}
+///
+/// let my_boxed_slice = unsafe {
+///         let _ensure_correct = || { [10; 100_000] };
+///
+///         let mut res = std::boxed::Box::<[i32; 100_000]>::new_uninit();
+///         let ptr = res.as_mut_ptr();
+///         for i_0 in 0..100_000 { (&raw mut (*ptr)[i_0]).write(10); }
+///         res.assume_init()
+/// };
 /// ```
 #[proc_macro]
 pub fn place_boxed(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as Expr);
 
-    let struct_expr = match input {
+    let inp = parse_macro_input!(input as PlaceBoxedInput);
+    let struct_expr = match inp.expr {
         syn::Expr::Struct(s) => s,
-        _ => return syn::Error::new_spanned(input, "Expected structure initializer")
-            .to_compile_error()
-            .into()
+        e => {
+            let Some(ty) = inp.ty else {
+                return syn::Error::new_spanned(e, "Expected type argument for constructing non-structure type")
+                    .to_compile_error()
+                    .into();
+            };
+            let generated = inner_place_expr(quote!{ (*ptr) }, &e, 0);
+            return quote! {
+
+                unsafe {
+                    let _ensure_correct = || { #e };
+
+                    let mut res = std::boxed::Box::<#ty>::new_uninit();
+
+                    let ptr = res.as_mut_ptr();
+
+                    #generated
+
+                    res.assume_init()
+                }
+            }.into()
+        }
     };
 
     if let Some(rest) = &struct_expr.rest {
@@ -179,9 +237,12 @@ pub fn place_boxed(input: TokenStream) -> TokenStream {
 
 
 
-
     quote! {
-        {
+        unsafe {
+            let _ensure_struct_correct = || {
+                #struct_expr
+            };
+
             let mut res = std::boxed::Box::<#path>::new_uninit();
 
             let ptr = res.as_mut_ptr();
@@ -193,5 +254,4 @@ pub fn place_boxed(input: TokenStream) -> TokenStream {
         }
     }.into()
 }
-
 
