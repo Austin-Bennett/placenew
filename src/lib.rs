@@ -1,8 +1,9 @@
 extern crate proc_macro;
 use proc_macro::{TokenStream};
 use std::convert::TryInto;
+use proc_macro2::Span;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, Expr, FieldValue, Member};
+use syn::{parse_macro_input, Expr, FieldValue, Member, Type, TypePath};
 use syn::parse::Parser;
 /*
 This macro allows you to construct values in the heap in-place safely,
@@ -76,12 +77,17 @@ fn inner_place_expr(member: proc_macro2::TokenStream, val: &Expr, nesting: u32) 
     }
 }
 
-struct PlaceBoxedInput {
+struct PlaceKnownInput {
     expr: syn::Expr,
     ty: Option<syn::Type>,
 }
 
-impl syn::parse::Parse for PlaceBoxedInput {
+struct PlaceIntoInput {
+    ptr: syn::Expr,
+    expr: syn::Expr,
+}
+
+impl syn::parse::Parse for PlaceKnownInput {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let expr = input.parse::<syn::Expr>()?;
         let ty = if input.peek(syn::Token![,]) {
@@ -91,6 +97,20 @@ impl syn::parse::Parse for PlaceBoxedInput {
             None
         };
         Ok(Self { expr, ty })
+    }
+}
+
+impl syn::parse::Parse for PlaceIntoInput {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let ptr = input.parse::<syn::Expr>()?;
+
+        let expr = if input.peek(syn::Token![,]) {
+            input.parse::<syn::Token![,]>()?;
+            input.parse::<syn::Expr>()?
+        } else {
+            return Err(syn::Error::new(Span::call_site(), "Expected expression to place into"))
+        };
+        Ok(Self { ptr, expr })
     }
 }
 
@@ -110,14 +130,12 @@ impl syn::parse::Parse for PlaceBoxedInput {
 ///    nested_array: [[i32; 10]; 5]
 ///}
 ///
-///let my_box = place_boxed!(
-///    MyStruct {
-///        trivial_val: 10,
-///        name: String::from("Bob"),
-///        array: [1, 2, 3, 4, 5],
-///        nested_array: [[5; 10]; 5]
-///    }
-///);
+///let my_box = = place_boxed!(MyStruct{
+///         trivial_val: 100,
+///         name: String::from("Jeff"),
+///         array: [1, 2, 3, 4, 5],
+///         nested_array: [[0; 10]; 5]
+///     });
 ///
 /// let my_boxed_slice = place_boxed!( [10; 100_000], [i32; 100_000] );
 /// ```
@@ -125,76 +143,152 @@ impl syn::parse::Parse for PlaceBoxedInput {
 ///example codegen (edited for readability):
 /// ```rust
 ///let my_box = unsafe {
-///    let _ensure_struct_correct = || {
-///         MyStruct {
-///            trivial_val: 10,
-///            name: String::from("Bob"),
-///            array: [1, 2, 3, 4, 5],
-///            nested_array: [[5; 10]; 5]
+///         let mut res = std::boxed::Box::<MyStruct>::new_uninit();
+///         let ptr = res.as_mut_ptr();
+///
+///         //inner place_into! expansion
+///         {
+///             let _ensure_struct_correct = || {
+///                 MyStruct {
+///                     trivial_val: 100,
+///                     name: String::from("Jeff"),
+///                     array: [1, 2, 3, 4, 5],
+///                     nested_array: [[0; 10]; 5],
+///                 }
+///             };
+///
+///
+///             let ptr = ptr;
+///
+///             (&raw mut (*ptr).trivial_val).write(100);
+///
+///             (&raw mut (*ptr).name).write(String::from("Jeff"));
+///
+///             (&raw mut (*ptr).array[0usize]).write(1);
+///
+///             (&raw mut (*ptr).array[1usize]).write(2);
+///
+///             (&raw mut (*ptr).array[2usize]).write(3);
+///
+///             (&raw mut (*ptr).array[3usize]).write(4);
+///
+///             (&raw mut (*ptr).array[4usize]).write(5);
+///
+///             for i_0 in 0..5 { for i_1 in 0..10 { (&raw mut (*ptr).nested_array[i_0][i_1]).write(0); } }
 ///         }
-///    };
 ///
-///    let mut res = std::boxed::Box::<MyStruct>::new_uninit();
-///
-///    let ptr = res.as_mut_ptr();
-///
-///    (&raw mut (*ptr).trivial_val).write(10);
-///
-///    (&raw mut (*ptr).name).write(String::from("Bob"));
-///
-///    (&raw mut (*ptr).array[0usize]).write(1);
-///
-///    (&raw mut (*ptr).array[1usize]).write(2);
-///
-///    (&raw mut (*ptr).array[2usize]).write(3);
-///
-///    (&raw mut (*ptr).array[3usize]).write(4);
-///
-///    (&raw mut (*ptr).array[4usize]).write(5);
-///
-///    for i_0 in 0..5 {
-///        for i_1 in 0..10 {
-///            (&raw mut (*ptr).nested_array[i_0][i_1]).write(5);
-///        }
-///    }
-///
-///    res.assume_init()
-///}
+///         res.assume_init()
+///     };
 ///
 /// let my_boxed_slice = unsafe {
-///         let _ensure_correct = || { [10; 100_000] };
-///
 ///         let mut res = std::boxed::Box::<[i32; 100_000]>::new_uninit();
 ///         let ptr = res.as_mut_ptr();
-///         for i_0 in 0..100_000 { (&raw mut (*ptr)[i_0]).write(10); }
+///
+///         //inner place_into! expansion
+///         {
+///             let _ensure_correct = || { [10; 100_000] };
+///
+///             let ptr = ptr;
+///
+///             for i_0 in 0..100_000 { (&raw mut (*ptr)[i_0]).write(10); }
+///         }
+///
 ///         res.assume_init()
-/// };
+///     };
 /// ```
+///
+///  see also: place_into!
 #[proc_macro]
 pub fn place_boxed(input: TokenStream) -> TokenStream {
+    let inp = parse_macro_input!(input as PlaceKnownInput);
 
-    let inp = parse_macro_input!(input as PlaceBoxedInput);
+    let ty = if let Some(ty) = inp.ty {
+        ty
+    } else {
+        let Expr::Struct(s) = &inp.expr else { return syn::Error::new_spanned(inp.expr, "Expected type argument for constructing non-structure type")
+            .to_compile_error().into() };
+
+        Type::Path(TypePath{
+            qself: None,
+            path: s.path.clone()
+        })
+    };
+
+    let expr = inp.expr;
+
+
+    quote! {
+
+        unsafe{
+            let mut res = std::boxed::Box::<#ty>::new_uninit();
+
+            let ptr = res.as_mut_ptr();
+
+            place_into!(ptr, #expr);
+
+            res.assume_init()
+        }
+
+    }.into()
+}
+
+
+/// place_into! is a macro that generates code to construct a value in-place at a specified pointer location.
+/// you must wrap it in an unsafe block, as the macro does not or can not verify that the pointer
+/// is both properly aligned and contains enough space for the data to be constructed there/
+///
+/// example usage:
+/// ```rust
+/// let my_slice_allocation = unsafe{ alloc(Layout::new::<[i32; 100_000]>()) as *mut [i32; 100_000] };
+///
+/// unsafe{ place_into!(my_slice_allocation, [10; 100_000]); }
+///
+/// let my_alloced_slice = unsafe{ &*my_slice_allocation };
+///
+/// for i in 0..100_000 {
+///     assert_eq!(my_alloced_slice[i], 10)
+/// }
+/// ```
+///
+/// example codegen (edited for readability):
+/// ```rust
+/// let my_slice_allocation = unsafe{ alloc(Layout::new::<[i32; 100_000]>()) as *mut [i32; 100_000] };
+///
+/// unsafe{
+///     {
+///         let _ensure_correct = || { [10; 100_000] };
+///         let ptr = my_slice_allocation;
+///         for i_0 in 0..100_000 { (&raw mut (*ptr)[i_0]).write(10); }
+///     }
+/// }
+///
+/// let my_alloced_slice = unsafe{ &*my_slice_allocation };
+///
+/// for i in 0..100_000 {
+///     assert_eq!(my_alloced_slice[i], 10)
+/// }
+/// ```
+///
+/// see also: place_boxed!
+#[proc_macro]
+pub fn place_into(input: TokenStream) -> TokenStream {
+
+    let inp = parse_macro_input!(input as PlaceIntoInput);
+    let ptr = inp.ptr;
+
     let struct_expr = match inp.expr {
         syn::Expr::Struct(s) => s,
         e => {
-            let Some(ty) = inp.ty else {
-                return syn::Error::new_spanned(e, "Expected type argument for constructing non-structure type")
-                    .to_compile_error()
-                    .into();
-            };
+
             let generated = inner_place_expr(quote!{ (*ptr) }, &e, 0);
             return quote! {
 
-                unsafe {
+                {
                     let _ensure_correct = || { #e };
 
-                    let mut res = std::boxed::Box::<#ty>::new_uninit();
-
-                    let ptr = res.as_mut_ptr();
+                    let ptr = #ptr;
 
                     #generated
-
-                    res.assume_init()
                 }
             }.into()
         }
@@ -208,8 +302,6 @@ pub fn place_boxed(input: TokenStream) -> TokenStream {
     }
 
 
-
-    let path = &struct_expr.path;
 
 
     let mut generated = Vec::new();
@@ -233,19 +325,14 @@ pub fn place_boxed(input: TokenStream) -> TokenStream {
 
 
     quote! {
-        unsafe {
+        {
             let _ensure_struct_correct = || {
                 #struct_expr
             };
 
-            let mut res = std::boxed::Box::<#path>::new_uninit();
-
-            let ptr = res.as_mut_ptr();
+            let ptr = #ptr;
 
             #(#generated)*
-
-            res.assume_init()
-
         }
     }.into()
 }

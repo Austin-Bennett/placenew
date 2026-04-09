@@ -1,24 +1,22 @@
 [package]
 name = "placenew"
-version = "2.0.1"
+version = "3.0.0"
 authors = ["peterparker <theaustinbennett@gmail.com>"]
 keywords = ["template", "proc_macro", "procmacro"]
 edition = "2018"
 
 license = "MIT"
 description = """
-A crate providing the macro 'place_boxed' which allows you to create a object in-place on the heap
-using the normal struct initializer, the macro uses Box::new_uninit(), initializes all members
-using the values from the struct initializer, and then calls .assume_init()
-for regular value types => writes the expression in-place
-for array types ([T; N]) => generates a for loop for expressions such as [0; 100],
-and generates a sequence of arr[i] = v for an expression such as [0, 1, 2, 3]
+A crate providing the macro 'place_boxed' and 'place_into', place_boxed! allows you to construct a structure or value
+into a Box<T> in-place, while place_into! allows you to construct a structure or value into a pointer in-place
 """
 repository = "https://github.com/Austin-Bennett/placenew"
 readme = "README.md"
 
 [lib]
 proc-macro = true
+
+[features]
 
 [dependencies]
 quote = "1"
