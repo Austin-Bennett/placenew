@@ -98,3 +98,36 @@ let my_boxed_slice = unsafe {
     res.assume_init()
 }
 ```
+
+**If working with raw pointers, there is now a place_into! macro aswell**
+```rust
+let my_slice_allocation = unsafe{ alloc(Layout::new::<[i32; 100_000]>()) as *mut [i32; 100_000] };
+
+unsafe{ place_into!(my_slice_allocation, [10; 100_000]); }
+
+let my_alloced_slice = unsafe{ &*my_slice_allocation };
+
+for i in 0..100_000 {
+    assert_eq!(my_alloced_slice[i], 10)
+}
+```
+
+**Codegen:**
+```rust
+let my_slice_allocation = unsafe{ alloc(Layout::new::<[i32; 100_000]>()) as *mut [i32; 100_000] };
+
+//macro expansion
+unsafe{
+    {
+        let _ensure_correct = || { [10; 100_000] };
+        let ptr = my_slice_allocation;
+        for i_0 in 0..100_000 { (&raw mut (*ptr)[i_0]).write(10); }
+    }
+}
+
+let my_alloced_slice = unsafe{ &*my_slice_allocation };
+
+for i in 0..100_000 {
+    assert_eq!(my_alloced_slice[i], 10)
+}
+```
